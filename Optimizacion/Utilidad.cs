@@ -14,10 +14,10 @@ namespace Optimizacion
         double[] ExpectedReturns { get; }
         
         public Utilidad(double lambda, double t, double[,]omega, double[] expectedReturns) {
-            this.Lambda = lambda;
-            this.T = t;
-            this.Omega = omega;
-            this.ExpectedReturns = expectedReturns;
+            Lambda = lambda;
+            T = t;
+            Omega = omega;
+            ExpectedReturns = expectedReturns;
         }
         void func(double[] xs, double[] fi, object obj)
         {
