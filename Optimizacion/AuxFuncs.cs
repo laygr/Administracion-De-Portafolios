@@ -79,5 +79,77 @@ namespace Optimizacion
             System.Console.WriteLine("{0}", alglib.ap.format(result, 4)); // EXPECTED: [[0.666666,-0.333333],[-0.333333,0.666666]]
             return result;
         }
+        public static double[,] mmultbyscalar(double[,] a, double f)
+        {
+            double[,] result = (double[,])a.Clone();
+            for (int r = 0; r < a.GetLength(0); r++)
+            {
+                for (int c = 0; c < a.GetLength(1); c++)
+                {
+                    result[r, c] *= f;
+                }
+            }
+            return result;
+        }
+
+        public static double[,] mmultbyscalar(double f, double[,] a)
+        {
+            return mmultbyscalar(a, f);
+        }
+
+        public static double[,] dividebyscalar(double[,]a, double f)
+        {
+            double[,] result = (double[,])a.Clone();
+            for (int r = 0; r < a.GetLength(0); r++)
+            {
+                for (int c = 0; c < a.GetLength(1); c++)
+                {
+                    result[r, c] /= f;
+                }
+            }
+            return result;
+        }
+
+        public static double[,] pointwiseDivision(double[,]a, double[,] b)
+        {
+            double[,] result = (double[,])a.Clone();
+            for (int r = 0; r < a.GetLength(0); r++)
+            {
+                for (int c = 0; c < a.GetLength(1); c++)
+                {
+                    result[r, c] /= b[r,c];
+                }
+            }
+            return result;
+        }
+        public static double[,] addition(double[,] a, double[,] b)
+        {
+            double[,] result = (double[,])a.Clone();
+            for (int r = 0; r < a.GetLength(0); r++)
+            {
+                for (int c = 0; c < a.GetLength(1); c++)
+                {
+                    result[r, c] += b[r, c];
+                }
+            }
+            return result;
+        }
+
+        public static double[,] addScalar(double[,] a, double b)
+        {
+            double[,] result = (double[,])a.Clone();
+            for (int r = 0; r < a.GetLength(0); r++)
+            {
+                for (int c = 0; c < a.GetLength(1); c++)
+                {
+                    result[r, c] += b;
+                }
+            }
+            return result;
+        }
+        public static double[,] addScalar(double b, double[,]a)
+        {
+            return addScalar(a, b);
+        }
     }
 }
