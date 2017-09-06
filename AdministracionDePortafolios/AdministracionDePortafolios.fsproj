@@ -57,6 +57,8 @@
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="InputInterface.fs" />
+    <Compile Include="BlackLitterman.fs" />
+    <Compile Include="ExpectationsInclusion.fs" />
     <Compile Include="Program.fs" />
     <None Include="App.config" />
     <Content Include="packages.config" />
