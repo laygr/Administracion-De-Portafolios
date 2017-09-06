@@ -17,4 +17,6 @@ module Main =
         result.Variables
         |> Array.iter (printfn "%f")
         printfn "%A" argv
+        let arr = array2D [[2.;1.];[1.;2.]]
+        let inverse = MatrixOp.invert arr
         0 // devolver un código de salida entero

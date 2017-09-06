@@ -70,5 +70,14 @@ namespace Optimizacion
             alglib.rmatrixtranspose(m, n, a, 0, 0, ref result, 0, 0);
             return result;
         }
+        public static double[,] invert(double[,] a)
+        {
+            double[,] result = (double[,])a.Clone();
+            int info;
+            alglib.matinvreport rep;
+            alglib.rmatrixinverse(ref result, out info, out rep);
+            System.Console.WriteLine("{0}", alglib.ap.format(result, 4)); // EXPECTED: [[0.666666,-0.333333],[-0.333333,0.666666]]
+            return result;
+        }
     }
 }
