@@ -18,6 +18,21 @@ namespace Optimizacion
             }
             return result;
         }
+        public static double[] division(double[]a, double b)
+        {
+            double[] result = (double[])a.Clone();
+            for(int i = 0; i < a.GetLength(0); i++)
+            {
+                result[i] /= b;
+            }
+            return result;
+        }
+
+        public static double[] normalize(double[] a)
+        {
+            return division(a, a.Sum());
+        }
+        
         public static double[] subtraction(double[] a, double[] b)
         {
             double[] result = (double[])a.Clone();
@@ -169,6 +184,15 @@ namespace Optimizacion
         public static double[,] addScalar(double b, double[,]a)
         {
             return addScalar(a, b);
+        }
+        public static double[,] varcovar(double[,] mat)
+        {
+            int n = mat.GetLength(0);
+            int m = mat.GetLength(1);
+
+            double[,] result = new double[n, m];
+            alglib.covm(mat, out result);
+            return result;
         }
     }
 }

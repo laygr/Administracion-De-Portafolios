@@ -60,10 +60,11 @@
     <Compile Include="BlackLitterman.fs" />
     <Compile Include="ExpectationsInclusion.fs" />
     <Compile Include="DeedleExtensions.fs" />
+    <Compile Include="Returns.fs" />
+    <Compile Include="PortfolioManagement.fs" />
     <Compile Include="Program.fs" />
     <None Include="App.config" />
     <Content Include="packages.config" />
-    <Compile Include="Returns.fs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="Deedle">

@@ -6,6 +6,9 @@ open AdiminstracionDePortafolios
 open Optimizacion
 
 type Frame<'TRowKey, 'TColumnKey when 'TRowKey : equality and 'TColumnKey : equality> with
+    static member loadDateFrame filePath dateColumn =
+        Frame.ReadCsv(path=filePath, hasHeaders=true)
+        |> Frame.indexRowsDate dateColumn
     static member indexRowsByDateTime dateColumnName frame =
             let toDateTime dateColumnName (os:ObjectSeries<'TColumnKey>) =
                 (os.Get dateColumnName :?> string)
@@ -21,3 +24,5 @@ type Frame<'TRowKey, 'TColumnKey when 'TRowKey : equality and 'TColumnKey : equa
             |> InputInterface.matrixFromArrayOfArrays
         MatrixOp.transpose(m)
         
+    static member asArray (frame:Frame<_,_>) =
+        (Frame.asMatrix frame).[0,*]

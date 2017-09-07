@@ -19,18 +19,38 @@ namespace Optimizacion
             TransactionCost = transactionCost;
             Utility = utility;
         }
+        public UtilityResult(int n)
+        {
+            Weights = new double[n];
+            ExpectedReturn = 0;
+            StdDev = 0;
+            TransactionCost = 0;
+            Utility = 0;
+        }
     }
-    public class Utility
+
+    class State2
+    {
+        public double Lambda { get; }
+        public double T { get; }
+        public double[,] Omega { get; }
+        public double[] ExpectedReturns { get; }
+        public double[] PreviousPortfolio { get; }
+        public double TransactionCost { get; }
+        public double RiskFree { get; }
+    }
+
+    public class State
     {
         double Lambda { get; }
         double T { get; }
-        double [,] Omega { get; }
+        double[,] Omega { get; }
         double[] ExpectedReturns { get; }
         double[] PreviousPortfolio { get; }
         double TransactionCost { get; }
         double RiskFree { get; }
-        
-        public Utility(double lambda, double t, double[,]omega, double[] expectedReturns, double[] previousPortfolio, double transactionCost, double riskFree) {
+
+        public State(double lambda, double t, double[,]omega, double[] expectedReturns, double[] previousPortfolio, double transactionCost, double riskFree) {
             Lambda = lambda;
             T = t;
             Omega = omega;
@@ -39,7 +59,7 @@ namespace Optimizacion
             TransactionCost = transactionCost;
             RiskFree = riskFree;
         }
-        public UtilityResult UtilityFunc(double[] weights)
+        public UtilityResult Utility(double[] weights)
         {
             double[,] xsMatrix = MatrixOp.matrixFrowRow(weights);
 
@@ -57,13 +77,13 @@ namespace Optimizacion
 
             return new UtilityResult(weights, netExpectedReturn, stdDev, transactionCost, utility);
         }
-        void func(double[] xs, double[] fi, object obj)
+        void utility_func(double[] xs, double[] fi, object obj)
         {
-            var utilityResult = UtilityFunc(xs);
+            var utilityResult = Utility(xs);
             fi[0] = - utilityResult.Utility;
             fi[1] = Enumerable.Sum(xs) - 1;
         }
-        public UtilityResult Opt(double[] initialValues)
+        public UtilityResult OptimizeForUtility(double[] initialValues)
         {
             int n = initialValues.Length;
 
@@ -87,11 +107,11 @@ namespace Optimizacion
             alglib.minnssetscale(state, s);
             alglib.minnssetnlc(state, 1, 0);
 
-            alglib.minnsoptimize(state, func, null, null);
+            alglib.minnsoptimize(state, utility_func, null, null);
             alglib.minnsresults(state, out x1, out rep);
             Console.WriteLine("{0}", alglib.ap.format(x1, 3));
             Console.WriteLine("Value: {0}", state.fi[0]);
-            return UtilityFunc(x1);
+            return Utility(x1);
         }
     }
 }

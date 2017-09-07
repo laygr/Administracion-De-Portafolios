@@ -8,13 +8,16 @@ module Main =
     open Deedle
     open System
 
+    
+
     let omega = loadMatrix "..\..\Omega.csv" false
     let expectedReturns = loadRow "..\..\ExpectedReturns.csv" false
     let initialValues = loadRow "..\..\InitialValues.csv" false
-    let returns =
-        Frame.ReadCsv("..\..\Rendimientos.csv",hasHeaders=true)
-        |> Frame.indexRowsDate "Fecha"
-        //|> Frame.indexRowsByDateTime "Fecha"
+    let prices = Frame.loadDateFrame "..\..\Prices.csv" "Fecha"
+    let marketValues = Frame.loadDateFrame "..\..\MarketValue.csv" "Fecha"
+    
+    let returns = Frame.loadDateFrame "..\..\Rendimientos.csv" "Fecha"
+    let deltas = Frame.loadDateFrame "..\..\Deltas.csv" "Fecha"
 
     let benchmarkOmega = loadMatrix "..\..\BenchmarkOmega.csv" false
     let benchmarkWeights = loadRow "..\..\BenchmarkWeights.csv" false
@@ -22,8 +25,11 @@ module Main =
     let transactionCost = 0.001
     let riskFree = 0.05
     
+        
+    
     [<EntryPoint>]
     let main argv =
+
         let blankPortfolio = Array.zeroCreate (initialValues.Length)
         let opt1 = new Utility(lambda = 3.0, t = 5.0, omega = omega, expectedReturns = expectedReturns, previousPortfolio = blankPortfolio, transactionCost = transactionCost, riskFree = riskFree)
         let result1 = opt1.Opt(initialValues)
@@ -37,7 +43,8 @@ module Main =
         let initDay = DateTime(2007,2,1)
         let filtered = returns.Rows.[initDay .. initDay.AddMonths(1).AddDays(-1.0)]
 
-        let m = Frame.asMatrix filtered
+        let m = Frame.asMatrix returns
+        let varcovar = MatrixOp.varcovar(m);
 
         let x = BlackLitterman.withNormalizingFactor benchmarkWeights benchmarkOmega 0.0633 0.08
         let adjustedReturns =
