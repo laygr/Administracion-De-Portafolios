@@ -47,7 +47,7 @@
   <ItemGroup>
     <Compile Include="AuxFuncs.cs" />
     <Compile Include="Main.cs" />
-    <Compile Include="Result.cs" />
+    <Compile Include="TransactionCosts.cs" />
     <Compile Include="Utilidad.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

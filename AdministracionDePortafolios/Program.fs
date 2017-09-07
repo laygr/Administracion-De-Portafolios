@@ -5,22 +5,39 @@ module Main =
     
     open Optimizacion
     open InputInterface
+    open Deedle
+    open System
 
     let omega = loadMatrix "..\..\Omega.csv" false
     let expectedReturns = loadRow "..\..\ExpectedReturns.csv" false
     let initialValues = loadRow "..\..\InitialValues.csv" false
+    let returns =
+        Frame.ReadCsv("..\..\Rendimientos.csv",hasHeaders=true)
+        |> Frame.indexRowsDate "Fecha"
+        //|> Frame.indexRowsByDateTime "Fecha"
 
     let benchmarkOmega = loadMatrix "..\..\BenchmarkOmega.csv" false
     let benchmarkWeights = loadRow "..\..\BenchmarkWeights.csv" false
+
+    let transactionCost = 0.001
+    let riskFree = 0.05
     
     [<EntryPoint>]
     let main argv =
-        let opt = new Utilidad(lambda = 3.0, t = 5.0, omega = omega, expectedReturns = expectedReturns)
-        let result = opt.Opt(initialValues)
-        result.Variables
+        let blankPortfolio = Array.zeroCreate (initialValues.Length)
+        let opt1 = new Utility(lambda = 3.0, t = 5.0, omega = omega, expectedReturns = expectedReturns, previousPortfolio = blankPortfolio, transactionCost = transactionCost, riskFree = riskFree)
+        let result1 = opt1.Opt(initialValues)
+        result1.Weights
         |> Array.iter (printfn "%f")
-        let arr = array2D [[2.;1.];[1.;2.]]
-        let inverse = MatrixOp.invert arr
+        let opt2 = new Utility(lambda = 3.0, t = 5.0, omega = omega, expectedReturns = expectedReturns, previousPortfolio = blankPortfolio, transactionCost = 0.0, riskFree = riskFree)
+        let result2 = opt2.Opt(initialValues)
+        result2.Weights
+        |> Array.iter (printfn "%f")
+
+        let initDay = DateTime(2007,2,1)
+        let filtered = returns.Rows.[initDay .. initDay.AddMonths(1).AddDays(-1.0)]
+
+        let m = Frame.asMatrix filtered
 
         let x = BlackLitterman.withNormalizingFactor benchmarkWeights benchmarkOmega 0.0633 0.08
         let adjustedReturns =
@@ -30,4 +47,4 @@ module Main =
                 benchmarkOmega
             
         printfn "%A" argv
-        0 // devolver un código de salida entero
+        0

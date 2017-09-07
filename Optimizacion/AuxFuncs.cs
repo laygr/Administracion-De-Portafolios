@@ -18,6 +18,25 @@ namespace Optimizacion
             }
             return result;
         }
+        public static double[] subtraction(double[] a, double[] b)
+        {
+            double[] result = (double[])a.Clone();
+            for(int i = 0; i < a.GetLength(0); i++)
+            {
+                result[i] -= b[i];
+            }
+            return result;
+        }
+
+        public static double[] difference(double[] a, double[] b)
+        {
+            double[] result = (double[])a.Clone();
+            for (int i = 0; i < a.GetLength(0); i++)
+            {
+                result[i] = Math.Abs(result[i] - b[i]);
+            }
+            return result;
+        }
     }
     public static class MatrixOp
     {

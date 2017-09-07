@@ -1,40 +1,69 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Optimizacion
 {
-    public class Utilidad
+    public class UtilityResult
+    {
+        public double[] Weights { get; }
+        public double ExpectedReturn { get; }
+        public double StdDev { get; }
+        public double TransactionCost { get; }
+        public double Utility { get; }
+
+        public UtilityResult(double[] weights, double expectedReturn, double stdDev, double transactionCost, double utility)
+        {
+            Weights = weights;
+            ExpectedReturn = expectedReturn;
+            StdDev = stdDev;
+            TransactionCost = transactionCost;
+            Utility = utility;
+        }
+    }
+    public class Utility
     {
         double Lambda { get; }
         double T { get; }
         double [,] Omega { get; }
         double[] ExpectedReturns { get; }
+        double[] PreviousPortfolio { get; }
+        double TransactionCost { get; }
+        double RiskFree { get; }
         
-        public Utilidad(double lambda, double t, double[,]omega, double[] expectedReturns) {
+        public Utility(double lambda, double t, double[,]omega, double[] expectedReturns, double[] previousPortfolio, double transactionCost, double riskFree) {
             Lambda = lambda;
             T = t;
             Omega = omega;
             ExpectedReturns = expectedReturns;
+            PreviousPortfolio = previousPortfolio;
+            TransactionCost = transactionCost;
+            RiskFree = riskFree;
         }
-        void func(double[] xs, double[] fi, object obj)
+        public UtilityResult UtilityFunc(double[] weights)
         {
-            double[,] xsMatrix = MatrixOp.matrixFrowRow(xs);
+            double[,] xsMatrix = MatrixOp.matrixFrowRow(weights);
 
-            double ret = VectorOp.sumproduct(xs, ExpectedReturns) * T;
+            double expectedReturn = VectorOp.sumproduct(weights, ExpectedReturns) * T;
             double stdDev =
                 Math.Sqrt(
                     T *
                     MatrixOp.mmult(MatrixOp.mmult(xsMatrix, Omega), MatrixOp.transpose(xsMatrix))[0, 0]
                 );
 
+            double transactionCost = TransactionCosts.Cost(PreviousPortfolio, weights, TransactionCost);
+            double futureTransactionCost = transactionCost * Math.Exp(RiskFree);
+            double netExpectedReturn = expectedReturn - futureTransactionCost;
+            double utility = netExpectedReturn - Math.Pow(stdDev, 2) * Lambda;
 
-            fi[0] = -(ret - Math.Pow(stdDev, 2) * this.Lambda);
+            return new UtilityResult(weights, netExpectedReturn, stdDev, transactionCost, utility);
+        }
+        void func(double[] xs, double[] fi, object obj)
+        {
+            var utilityResult = UtilityFunc(xs);
+            fi[0] = - utilityResult.Utility;
             fi[1] = Enumerable.Sum(xs) - 1;
         }
-        public Result Opt(double[] initialValues)
+        public UtilityResult Opt(double[] initialValues)
         {
             int n = initialValues.Length;
 
@@ -62,7 +91,7 @@ namespace Optimizacion
             alglib.minnsresults(state, out x1, out rep);
             Console.WriteLine("{0}", alglib.ap.format(x1, 3));
             Console.WriteLine("Value: {0}", state.fi[0]);
-            return new Result(x1, state.fi[0]);
+            return UtilityFunc(x1);
         }
     }
 }

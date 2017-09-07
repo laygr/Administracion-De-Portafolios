@@ -59,9 +59,11 @@
     <Compile Include="InputInterface.fs" />
     <Compile Include="BlackLitterman.fs" />
     <Compile Include="ExpectationsInclusion.fs" />
+    <Compile Include="DeedleExtensions.fs" />
     <Compile Include="Program.fs" />
     <None Include="App.config" />
     <Content Include="packages.config" />
+    <Compile Include="Returns.fs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="Deedle">
@@ -78,6 +80,7 @@
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
+    <Reference Include="System.Data" />
     <Reference Include="System.Numerics" />
     <Reference Include="System.ValueTuple">
       <HintPath>..\packages\System.ValueTuple.4.3.1\lib\netstandard1.0\System.ValueTuple.dll</HintPath>
