@@ -4,11 +4,13 @@ open Deedle
 open System
 open AdiminstracionDePortafolios
 open Optimizacion
+open System.IO
 
 type Frame<'TRowKey, 'TColumnKey when 'TRowKey : equality and 'TColumnKey : equality> with
     static member loadDateFrame filePath dateColumn =
         Frame.ReadCsv(path=filePath, hasHeaders=true)
         |> Frame.indexRowsDate dateColumn
+        |> Frame.sortRowsByKey
     static member indexRowsByDateTime dateColumnName frame =
             let toDateTime dateColumnName (os:ObjectSeries<'TColumnKey>) =
                 (os.Get dateColumnName :?> string)
@@ -26,3 +28,12 @@ type Frame<'TRowKey, 'TColumnKey when 'TRowKey : equality and 'TColumnKey : equa
         
     static member asArray (frame:Frame<_,_>) =
         (Frame.asMatrix frame).[0,*]
+
+    static member varcovar frame =
+        let m = Frame.asMatrix frame
+        MatrixOp.varcovar(m)
+
+type Series<'TRowKey, 'TColumnKey when 'TRowKey : equality> with
+    static member loadDateSeries filePath dateColumn valuesColumn =
+        Frame.loadDateFrame filePath dateColumn
+        |> Frame.getCol valuesColumn

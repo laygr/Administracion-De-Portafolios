@@ -8,50 +8,33 @@ module Main =
     open Deedle
     open System
 
-    
-
-    let omega = loadMatrix "..\..\Omega.csv" false
-    let expectedReturns = loadRow "..\..\ExpectedReturns.csv" false
-    let initialValues = loadRow "..\..\InitialValues.csv" false
-    let prices = Frame.loadDateFrame "..\..\Prices.csv" "Fecha"
-    let marketValues = Frame.loadDateFrame "..\..\MarketValue.csv" "Fecha"
-    
-    let returns = Frame.loadDateFrame "..\..\Rendimientos.csv" "Fecha"
-    let deltas = Frame.loadDateFrame "..\..\Deltas.csv" "Fecha"
-
+    (*
     let benchmarkOmega = loadMatrix "..\..\BenchmarkOmega.csv" false
     let benchmarkWeights = loadRow "..\..\BenchmarkWeights.csv" false
-
-    let transactionCost = 0.001
-    let riskFree = 0.05
+    *)
+    
     
         
     
     [<EntryPoint>]
     let main argv =
+        
 
-        let blankPortfolio = Array.zeroCreate (initialValues.Length)
-        let opt1 = new Utility(lambda = 3.0, t = 5.0, omega = omega, expectedReturns = expectedReturns, previousPortfolio = blankPortfolio, transactionCost = transactionCost, riskFree = riskFree)
-        let result1 = opt1.Opt(initialValues)
-        result1.Weights
-        |> Array.iter (printfn "%f")
-        let opt2 = new Utility(lambda = 3.0, t = 5.0, omega = omega, expectedReturns = expectedReturns, previousPortfolio = blankPortfolio, transactionCost = 0.0, riskFree = riskFree)
-        let result2 = opt2.Opt(initialValues)
-        result2.Weights
-        |> Array.iter (printfn "%f")
+        let initDate = DateTime(2015, 09, 01)
+        let endDate = DateTime(2016, 09, 01)
+        let targetDate = DateTime(2019, 12, 31)
+        let returns = Frame.loadDateFrame "..\..\Input Data\Benchmark Returns.csv" "Fecha"
+        let marketCap = Frame.loadDateFrame "..\..\Input Data\Benchmark Market Cap.csv" "Fecha"
+        let deltas = Frame.loadDateFrame "..\..\Input Data\Benchmark Deltas.csv" "Fecha"
+        let riskFreeRates = Series.loadDateSeries "..\..\Input Data\Risk Free Rates.csv" "Fecha" "SF43936"
+        let targetReturn = RatesM.Return.returnFor 14466136.00 32630537.75 
 
-        let initDay = DateTime(2007,2,1)
-        let filtered = returns.Rows.[initDay .. initDay.AddMonths(1).AddDays(-1.0)]
+        let transactionCost = 10.0/10000.0
 
-        let m = Frame.asMatrix returns
-        let varcovar = MatrixOp.varcovar(m);
+        let frame =
+            PortfolioManagement.simulate initDate endDate targetDate returns marketCap deltas riskFreeRates targetReturn transactionCost
+            //PortfolioManagement.simulateBenchmark initDate endDate targetDate returns marketCap riskFreeRates transactionCost
 
-        let x = BlackLitterman.withNormalizingFactor benchmarkWeights benchmarkOmega 0.0633 0.08
-        let adjustedReturns =
-            ExpectationsInclusion.adjustedReturns
-                [|0.074455629; 0.070676728; 0.07313265; 0.081624918; 0.111186519; 0.082504604; 0.082040492; 0.077847073; 0.075568456; 0.074764192|]
-                [|0.005; 0.;0.;0.;-0.01; 0.005;0.;0.;0.;0.01|]
-                benchmarkOmega
-            
+        frame.SaveCsv("../../Output Data/result.csv",true)
         printfn "%A" argv
         0

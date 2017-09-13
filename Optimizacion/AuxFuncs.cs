@@ -18,6 +18,15 @@ namespace Optimizacion
             }
             return result;
         }
+        public static double[] multiplication(double[] a, double b)
+        {
+            double[] result = (double[])a.Clone();
+            for (int i = 0; i < a.GetLength(0); i++)
+            {
+                result[i] *= b;
+            }
+            return result;
+        }
         public static double[] division(double[]a, double b)
         {
             double[] result = (double[])a.Clone();
