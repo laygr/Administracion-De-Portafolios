@@ -61,8 +61,10 @@ let simulate (firstDate:DateTime) lastDate targetDate (returns:Frame<_,_>) (mark
     let state = new StateForReturnTargeting()
     state.TransactionCost <- transactionCost
     state.Years <- 1.0
-    
-    let datesForAnalysis = returns.RowKeys |> Seq.filter(fun date -> date >= firstDate && date < lastDate)
+    let rand = System.Random()
+    let datesForAnalysis =
+        returns.RowKeys
+        |> Seq.filter(fun date -> date >= firstDate && date < lastDate)
 
     seq {
         let mutable currentPortfolio = ValuationResult(returns.ColumnCount).Weights
