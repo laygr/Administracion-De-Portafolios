@@ -29,9 +29,12 @@ type Frame<'TRowKey, 'TColumnKey when 'TRowKey : equality and 'TColumnKey : equa
     static member asArray (frame:Frame<_,_>) =
         (Frame.asMatrix frame).[0,*]
 
-    static member varcovar frame =
+    static member varcovar multiplier frame =
         let m = Frame.asMatrix frame
-        MatrixOp.varcovar(m)
+        MatrixOp.mmultbyscalar(MatrixOp.varcovar(m), multiplier)
+
+    static member rowAsArray rowKey (frame:Frame<_,_>) =
+        Frame.asArray (frame.Rows.[rowKey..rowKey])
 
 type Series<'TRowKey, 'TColumnKey when 'TRowKey : equality> with
     static member loadDateSeries filePath dateColumn valuesColumn =

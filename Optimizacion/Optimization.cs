@@ -1,130 +1,41 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Optimizacion
 {
     public enum OptimizationKinds { TargetReturn, TargetPortfolio, MaximizeUtility }
     public static class Optimization {
         
-        public static ValuationResult ValuePortfolio (StateForUtilityMaximization state, double[] weights)
-         {
-             double[,] xsMatrix = MatrixOp.matrixFrowRow(weights);
-
-             double expectedReturn = VectorOp.sumproduct(weights, state.ExpectedReturns) * state.Years;
-             double stdDev =
-                 Math.Sqrt(
-                     state.Years *
-                     MatrixOp.mmult(MatrixOp.mmult(xsMatrix, state.Omega), MatrixOp.transpose(xsMatrix))[0, 0]
-                 );
-
-             double transactionCost = TransactionCosts.Cost(state.PreviousPortfolio, weights, state.TransactionCost);
-             double futureTransactionCost = transactionCost * Math.Exp(state.Years * state.RiskFree);
-             double netExpectedReturn = expectedReturn - futureTransactionCost;
-             double utility = netExpectedReturn - Math.Pow(stdDev, 2) * state.Lambda;
-
-             return new ValuationResult
-             {
-                 Weights = weights,
-                 ExpectedReturn = netExpectedReturn,
-                 StdDev = stdDev,
-                 TransactionCost = transactionCost,
-                 Utility = utility
-             };
-         }
-
-        public static ValuationResult ValuePortfolio(StateForReturnTargeting state, double[] weights)
-        {
-            double[,] xsMatrix = MatrixOp.matrixFrowRow(weights);
-
-            double expectedReturn = VectorOp.sumproduct(weights, state.ExpectedReturns) * state.Years;
-            double stdDev =
-                Math.Sqrt(
-                    state.Years *
-                    MatrixOp.mmult(MatrixOp.mmult(xsMatrix, state.Omega), MatrixOp.transpose(xsMatrix))[0, 0]
-                );
-
-            double transactionCost = TransactionCosts.Cost(state.PreviousPortfolio, weights, state.TransactionCost);
-            double futureTransactionCost = transactionCost * Math.Exp(state.Years * state.RiskFree);
-            double netExpectedReturn = expectedReturn - futureTransactionCost;
-            double error = netExpectedReturn - state.TargetReturn;
-
-            return new ValuationResult
-            {
-                Weights = weights,
-                ExpectedReturn = netExpectedReturn,
-                StdDev = stdDev,
-                TransactionCost = transactionCost,
-                Error = error
-            };
-        }
-        public static ValuationResult ValuePortfolio(StateForPortfolioTargeting state, double[] weights)
-        {
-            double[,] xsMatrix = MatrixOp.matrixFrowRow(weights);
-
-            double expectedReturn = VectorOp.sumproduct(weights, state.ExpectedReturns) * state.Years;
-            double stdDev =
-                Math.Sqrt(
-                    state.Years *
-                    MatrixOp.mmult(MatrixOp.mmult(xsMatrix, state.Omega), MatrixOp.transpose(xsMatrix))[0, 0]
-                );
-
-            double transactionCost = TransactionCosts.Cost(state.PreviousPortfolio, weights, state.TransactionCost);
-            double futureTransactionCost = transactionCost * Math.Exp(state.Years * state.RiskFree);
-            double netExpectedReturn = expectedReturn - futureTransactionCost;
-            double error = VectorOp.difference(weights, state.TargetPortfolio).Sum();
-
-            return new ValuationResult
-            {
-                Weights = weights,
-                ExpectedReturn = netExpectedReturn,
-                StdDev = stdDev,
-                TransactionCost = transactionCost,
-                Error = error
-            };
-        }
-        public static ValuationResult ValuePortfolio(State state, double[] weights)
-        {
-            if (state.GetType() == typeof(StateForPortfolioTargeting))
-            {
-                return ValuePortfolio((StateForPortfolioTargeting)state, weights);
-            }
-            else if (state.GetType() == typeof(StateForReturnTargeting))
-            {
-                return ValuePortfolio((StateForReturnTargeting)state, weights);
-            }
-            else if (state.GetType() == typeof(StateForUtilityMaximization))
-            {
-                return ValuePortfolio((StateForUtilityMaximization)state, weights);
-            }
-            else
-            {
-                return null;
-            }
-        }
-        
         static Func<StateForReturnTargeting, alglib.ndimensional_fvec> target_return_func = (state) =>
          {
 
-             alglib.ndimensional_fvec f = (xs, fi, obj) =>
+             alglib.ndimensional_fvec f = (newStocksAllocation, fi, obj) =>
              {
-                 var valuation = ValuePortfolio(state, xs);
+                 var valuation = RebalancingValuation.ValuePortfolio(state, newStocksAllocation);
+                 var error = state.TargetReturn - valuation.ExpectedReturn;
+                 //fi[0] = -valuation.ExpectedReturn / valuation.StdDev;
                  fi[0] = valuation.StdDev;
-                 fi[1] = Enumerable.Sum(xs) - 1;
-                 fi[2] = valuation.Error;
+                 fi[1] = Math.Pow(error,2) * 100000000000;
+                 // no left money:
+                 fi[2] = valuation.RebalancingCost.SharesBuySell * 1000; //fi[2] = Enumerable.Sum(xs) -1;
+
+                 // No short sales
+                 for(int i = 0; i < state.PreviousPortfolio.Length; i++)
+                 {
+                     fi[3 + i] = (-newStocksAllocation[i]) * 1000000;
+                 }
              };
              return f;
- 
          };
         static Func<StateForUtilityMaximization, alglib.ndimensional_fvec> maximize_utility_func = (state) =>
         {
             alglib.ndimensional_fvec d = (xs, fi, obj) =>
             {
+                /*
                 var valuation = ValuePortfolio(state, xs);
                 fi[0] = -valuation.Utility;
                 fi[1] = Enumerable.Sum(xs) - 1;
+                */
             };
             return d;
         };
@@ -132,17 +43,21 @@ namespace Optimizacion
         {
             alglib.ndimensional_fvec f = (xs, fi, obj) =>
             {
+                /*
                 var valuation = ValuePortfolio(state, xs);
                 fi[0] = valuation.Error;
                 fi[1] = Enumerable.Sum(xs) - 1;
+                */
             };
             return f;
         };
         
-        public static ValuationResult Optimize(State state, double[] initialValues)
+        public static ValuationResult Optimize(State state, double[] initialValues2)
         {
+            int n = state.PreviousPortfolio.Length;
+            var weights = VectorOp.createWith(n, 1.0 / n);
+            double[] initialValues = VectorOp.DotDivision(VectorOp.multiplication(weights, state.PortfolioTotalValue()), state.AvgPrices);
             alglib.ndimensional_fvec functionToOptimize = null;
-            int n = initialValues.Length;
             int equalities = 0;
             int inequalities = 0;
             var stateType = state.GetType();
@@ -151,7 +66,7 @@ namespace Optimizacion
             {
                 functionToOptimize = target_return_func((StateForReturnTargeting)state);
                 equalities = 2;
-                inequalities = 0;
+                inequalities = initialValues.Length;
             }else if(stateType == typeof(StateForUtilityMaximization))
             {
                 functionToOptimize = target_return_func((StateForReturnTargeting)state);
@@ -167,16 +82,16 @@ namespace Optimizacion
             double[] s = new double[n];
             for (int i = 0; i < n; i++)
             {
-                s[i] = 1;
+                s[i] = 1;// state.AvgPrices.Average() / state.AvgPrices[i];
             }
-            double epsx = 0.00000001;
-            double diffstep = 0.00000000001;
-            double radius = 0.1;
-            double rho = 0.1;
+            double epsx = 0.00001;
+            double diffstep = 0.1;
+            double radius = 1;
+            double rho = 5;
             int maxits = 0;
             alglib.minnsstate optimizationState;
             alglib.minnsreport rep;
-            double[] x1;
+            double[] newStocksAllocation;
 
             alglib.minnscreatef(n, initialValues, diffstep, out optimizationState);
             alglib.minnssetalgoags(optimizationState, radius, rho);
@@ -184,13 +99,13 @@ namespace Optimizacion
             alglib.minnssetscale(optimizationState, s);
             alglib.minnssetnlc(optimizationState, equalities, inequalities);
             alglib.minnsoptimize(optimizationState, functionToOptimize, null, null);
-            alglib.minnsresults(optimizationState, out x1, out rep);
-            Console.WriteLine("{0}", alglib.ap.format(x1, 3));
-            Console.WriteLine("Value: {0}", optimizationState.fi[0]);
-            var valuation = ValuePortfolio(state, x1);
+            alglib.minnsresults(optimizationState, out newStocksAllocation, out rep);
+            var valuation = RebalancingValuation.ValuePortfolio(state, newStocksAllocation);
+            Console.WriteLine("{0}", alglib.ap.format(newStocksAllocation, 3));
             Console.WriteLine("Expected return: {0}", valuation.ExpectedReturn);
             Console.WriteLine("StdDev: {0}", valuation.StdDev);
-            Console.WriteLine("Transaction cost: {0}", valuation.TransactionCost);
+            Console.WriteLine("buysell: {0}", valuation.RebalancingCost.SharesBuySell);
+            //Console.WriteLine("Error: {0}", state.targ);
             return valuation;
         }
     }

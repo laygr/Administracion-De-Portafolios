@@ -14,6 +14,15 @@ namespace Optimizacion
         public double TransactionCost { get; set; }
         public double Years { get; set; }
         public double RiskFree { get; set; }
+        public double[] BidPrices { get; set; }
+        public double[] AskPrices { get; set; }
+        public double[] AvgPrices { get; set; }
+        public double AvailableCash { get; set; }
+        public bool ShouldRebalance { get; set; }
+        public double PortfolioTotalValue()
+        {
+            return VectorOp.sumproduct(PreviousPortfolio, AvgPrices);
+        }
     }
     public class StateForUtilityMaximization : State
     {

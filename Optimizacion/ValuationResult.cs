@@ -8,21 +8,15 @@ namespace Optimizacion
 {
     public class ValuationResult
     {
-        public double[] Weights { get; set; }
+        public double[] StocksAllocation { get; set; }
+        public RebalancingCosts RebalancingCost { get; set; }
         public double ExpectedReturn { get; set; }
         public double StdDev { get; set; }
-        public double TransactionCost { get; set; }
-        public double Error { get; set; }
-        public double Utility { get; set; }
-
-        public void SetEmptyPortfolio(int n)
+        
+        public double SharpeRatio(double riskFreeRate)
         {
-            Weights = new double[n];
+            if (ExpectedReturn == 0 || ExpectedReturn - riskFreeRate == 0) return 0;
+            return (ExpectedReturn-riskFreeRate) / StdDev;
         }
-        public ValuationResult(int n)
-        {
-            Weights = new double[n];
-        }
-        public ValuationResult() { }
     }
 }

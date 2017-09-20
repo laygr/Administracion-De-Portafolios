@@ -20,3 +20,7 @@ module InputInterface =
         let s = CsvFile.Load(uri=fileName,hasHeaders=hasHeaders)
         let row = s.Rows |> Array.ofSeq |> Array.head
         Array.map float row.Columns
+
+    let loadRowOfStrings fileName hasHeaders =
+        let s = CsvFile.Load(uri=fileName,hasHeaders=hasHeaders)
+        (s.Rows |> Array.ofSeq |> Array.head).Columns

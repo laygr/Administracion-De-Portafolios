@@ -8,15 +8,38 @@ namespace Optimizacion
 {
     public static class VectorOp
     {
-        public static double sumproduct(double[] a, double[] b)
+        public static double[] createWith(int n, double initialValue)
         {
-            int n = a.GetLength(0);
-            double result = 0;
+            double[] result = new double[n];
             for (int i = 0; i < n; i++)
             {
-                result += a[i] * b[i];
+                result[i] = initialValue;
             }
             return result;
+        }
+        public static double[] DotProduct(double[] a, double[] b)
+        {
+            int n = a.Length;
+            double[] result = new double[n];
+            for(int i = 0; i < n; i++)
+            {
+                result[i] = a[i] * b[i];
+            }
+            return result;
+        }
+        public static double[] DotDivision(double[] a, double[] b)
+        {
+            int n = a.Length;
+            double[] result = new double[n];
+            for (int i = 0; i < n; i++)
+            {
+                result[i] = a[i] / b[i];
+            }
+            return result;
+        }
+        public static double sumproduct(double[] a, double[] b)
+        {
+            return DotProduct(a, b).Sum();
         }
         public static double[] multiplication(double[] a, double b)
         {
@@ -29,20 +52,53 @@ namespace Optimizacion
         }
         public static double[] division(double[]a, double b)
         {
-            double[] result = (double[])a.Clone();
-            for(int i = 0; i < a.GetLength(0); i++)
+            int n = a.Length;
+            double[] result = new double[n];
+            for(int i = 0; i < n; i++)
             {
-                result[i] /= b;
+                result[i] = a[i] / b;
             }
             return result;
         }
 
         public static double[] normalize(double[] a)
         {
-            return division(a, a.Sum());
+            var sum = a.Sum();
+            if (sum == 0)
+            {
+                return createWith(a.Length, 0);
+            }
+            else
+            {
+                return division(a, a.Sum());
+            }
         }
-        
-        public static double[] subtraction(double[] a, double[] b)
+        public static double[] normalize(double[] a, double normalizeTo)
+        {
+            return multiplication(normalize(a), normalizeTo);
+        }
+
+        public static double[] DotAddition(double[] a, double[] b)
+        {
+            double[] result = (double[])a.Clone();
+            for (int i = 0; i < a.GetLength(0); i++)
+            {
+                result[i] += b[i];
+            }
+            return result;
+        }
+
+        public static double[] Addition(double[] a, double b)
+        {
+            double[] result = (double[])a.Clone();
+            for (int i = 0; i < a.GetLength(0); i++)
+            {
+                result[i] += b;
+            }
+            return result;
+        }
+
+        public static double[] DotSubtraction(double[] a, double[] b)
         {
             double[] result = (double[])a.Clone();
             for(int i = 0; i < a.GetLength(0); i++)
@@ -50,6 +106,16 @@ namespace Optimizacion
                 result[i] -= b[i];
             }
             return result;
+        }
+
+        public static double SquareError(double[] a, double[] b)
+        {
+            double acum = 0;
+            for(int i = 0; i < a.Length; i++)
+            {
+                acum += Math.Pow(a[i] - b[i], 2);
+            }
+            return acum;
         }
 
         public static double[] difference(double[] a, double[] b)
@@ -64,7 +130,39 @@ namespace Optimizacion
     }
     public static class MatrixOp
     {
-        public static double[,] matrixFrowRow(double[] row)
+        public static double[,] diagonal(double[,] matrix)
+        {
+            int n = matrix.GetLength(0);
+            int m = matrix.GetLength(1);
+            double[,] result = new double[n, m];
+            for(int r = 0; r < n; r++)
+            {
+                for(int c = 0; c < m; c++)
+                {
+                    if (r == c)
+                    {
+                        result[r, c] = matrix[r, c];
+                    }
+                    else
+                    {
+                        result[r, c] = 0;
+                    }
+                }
+            }
+            return result;
+        }
+        public static double[] columnFromMatrix(double[,] m, int c)
+        {
+            int n = m.GetLength(0);
+            double[] result = new double[n];
+            for(int i = 0; i < n; i++)
+            {
+                result[i] = m[i, c];
+            }
+            return result;
+        }
+
+        public static double[,] matrixFromRow(double[] row)
         {
             int n = row.GetLength(0);
             double[,] result = new double[1, n];
@@ -74,7 +172,7 @@ namespace Optimizacion
             }
             return result;
         }
-        public static double[,] matrixFrowColumn(double[] column)
+        public static double[,] matrixFromColumn(double[] column)
         {
             int n = column.GetLength(0);
             double[,] result = new double[n, 1];
@@ -119,7 +217,6 @@ namespace Optimizacion
             int info;
             alglib.matinvreport rep;
             alglib.rmatrixinverse(ref result, out info, out rep);
-            System.Console.WriteLine("{0}", alglib.ap.format(result, 4)); // EXPECTED: [[0.666666,-0.333333],[-0.333333,0.666666]]
             return result;
         }
         public static double[,] mmultbyscalar(double[,] a, double f)

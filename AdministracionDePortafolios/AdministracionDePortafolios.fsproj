@@ -62,6 +62,7 @@
     <Compile Include="ExpectationsInclusion.fs" />
     <Compile Include="DeedleExtensions.fs" />
     <Compile Include="Returns.fs" />
+    <Compile Include="BookKeeping.fs" />
     <Compile Include="PortfolioManagement.fs" />
     <Compile Include="Program.fs" />
     <None Include="App.config" />
