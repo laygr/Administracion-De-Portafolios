@@ -8,11 +8,8 @@ let pickBestPortfolio (kind:OptimizationKinds) (newValuationOfCurrentPortfolio:V
     if
         match kind with
         | OptimizationKinds.TargetReturn ->
-            (newOptimization.ExpectedReturn < newValuationOfCurrentPortfolio.ExpectedReturn
-            && newOptimization.SharpeRatio(riskFreeRate) > newValuationOfCurrentPortfolio.SharpeRatio(riskFreeRate))
-            ||
-            (newOptimization.ExpectedReturn >= newValuationOfCurrentPortfolio.ExpectedReturn
-            && newOptimization.SharpeRatio(riskFreeRate) > newValuationOfCurrentPortfolio.SharpeRatio(riskFreeRate))
+             newOptimization.SharpeRatio(riskFreeRate) > newValuationOfCurrentPortfolio.SharpeRatio(riskFreeRate)
+             || true
             //&& Math.Abs(newOptimization.Error) < Math.Abs(newValuationOfCurrentPortfolio.Error))
         | OptimizationKinds.TargetPortfolio ->
             true
@@ -29,173 +26,124 @@ let smoothing value lambda percentage =
 let weightsForStocksAllocation stocksAllocation prices =
     VectorOp.normalize(VectorOp.DotProduct(prices, stocksAllocation))
     
-let roundStocks (state:State) (portfolioValuation:ValuationResult) =
+let roundStocks (state:MarketData) currentStocksAllocation newStocksAllocation=
     let stocksAllocation =
-        portfolioValuation.StocksAllocation
+        newStocksAllocation
         |> Array.map (fun (s:float) -> Math.Floor s)
-        //|> Array.map (fun (s:float) -> if s < 0.0 then 0.0 else s)
-    state.ShouldRebalance <- false
-    RebalancingValuation.ValuePortfolio(state, stocksAllocation)
+    RebalancingValuation.ValuePortfolio(state, currentStocksAllocation, stocksAllocation)
 
-let targetReturnSimulator
-    (bidPrices:Frame<_,_>) (askPrices:Frame<_,_>) (avgPrices:Frame<_,_>) (returns:Frame<_,_>) (marketValues:Frame<_,_>) (expectedPrices:Frame<_,_>)
-    (riskFreeRates:Series<_,_>) 
-    commission
-    initDate targetDate targetReturn
-    initialCash
-    (today: DateTime) 
-    (currentPortfolio:Portfolio)
-    =
+let constructMarketData
+        commission
+        (returns:Frame<_,_>)
+        bidPrices askPrices avgPrices expectedPrices (marketCapValues:Frame<_,_>) dividends riskFreeRates
+        (today:DateTime) =
     let oneYearAgo = today.AddYears(-1)
-    let benchmark = VectorOp.normalize(Frame.asArray marketValues.Rows.[today..today])
     let returnsForPeriod = returns.Rows.[oneYearAgo..today]
-
-    let varcovar =
-        Frame.varcovar 250. returnsForPeriod
-        //|> BlackLitterman.shrinkM 0.7
 
     let expectedAnnualReturns =
         let meanReturn = (Deedle.Stats.mean(returnsForPeriod)).Values |> Array.ofSeq
         VectorOp.multiplication(meanReturn, 250.0)
-                    
-    let anticipatedBenchmarkReturn = VectorOp.sumproduct(expectedAnnualReturns, benchmark)
+    let returnsForPeriod = returns.Rows.[oneYearAgo..today]
     let riskFreeRate = 0.04 //riskFreeRates.[today]
-    let impliedReturns = BlackLitterman.withNormalizingFactor benchmark varcovar anticipatedBenchmarkReturn riskFreeRate expectedAnnualReturns
-    let expectedReturns' =
-        let currentPrices = Frame.rowAsArray today avgPrices
-        let expectedPricesA = (Frame.rowAsArray today expectedPrices)
-        let expectedReturns = VectorOp.Addition(VectorOp.DotDivision(expectedPricesA, currentPrices), - 1.0)
-        let dateOfPronostic = DateTime(2017, 09,01)
-            //DateTime.Parse(expectedPrices.GetColumn("Fecha de pronostico").[today].ToString())
-        VectorOp.division(expectedReturns, (dateOfPronostic - today).TotalDays / 360.0)
-    let deltas = VectorOp.DotSubtraction(expectedReturns', impliedReturns)
-        
-    let expectedReturns = BlackLitterman.adjustedReturns impliedReturns deltas varcovar
-    let yearsToCashout =
-        let realYearsToCashout = FDatesM.yearsBetweenDates today targetDate
-        smoothing realYearsToCashout 0.5 (FDatesM.percentageOfTimeOccurred initDate today targetDate)
-    let returnToGoal =
-        let accumReturn = Returns.fromValues initialCash (currentPortfolio.TotalValue today avgPrices)
-        targetReturn - accumReturn
+    let marketData = new MarketData()
+    marketData.Commission <- commission
+    marketData.Omega <- Frame.varcovar 250. returnsForPeriod
+    marketData.RiskFree <- riskFreeRate
+    marketData.AvgPrices <- Frame.rowAsArray today avgPrices
+    marketData.BidPrices <- Frame.rowAsArray today bidPrices
+    marketData.AskPrices <- Frame.rowAsArray today askPrices
+    marketData.Dividends <- Frame.rowAsArray today dividends
+    marketData.ExpectedReturns <-
+        let expectedReturns' =
+            let currentPrices = Frame.rowAsArray today avgPrices
+            let expectedPricesA = (Frame.rowAsArray today expectedPrices)
+            let expectedReturns = VectorOp.Addition(VectorOp.DotDivision(expectedPricesA, currentPrices), - 1.0)
+            let dateOfPronostic = DateTime(2017, 09,01)
+                //DateTime.Parse(expectedPrices.GetColumn("Fecha de pronostico").[today].ToString())
+            VectorOp.division(expectedReturns, (dateOfPronostic - today).TotalDays / 360.0)
+        let benchmark = VectorOp.normalize(Frame.asArray marketCapValues.Rows.[today..today])       
+        let anticipatedBenchmarkReturn = VectorOp.sumproduct(expectedAnnualReturns, benchmark)
+        let impliedReturns = BlackLitterman.withNormalizingFactor benchmark marketData.Omega anticipatedBenchmarkReturn riskFreeRate expectedAnnualReturns
+        let deltas = VectorOp.DotSubtraction(expectedReturns', impliedReturns)
+        BlackLitterman.adjustedReturns impliedReturns deltas marketData.Omega
+        expectedReturns'
+    marketData
 
-    let state = new StateForReturnTargeting()
-    state.TransactionCost <- commission
-    state.Years <- 1.0
+let rebalanceForTargetReturn
+    datesForRebalancing
+    initDate targetDate targetReturn initialCash
+    (today: DateTime) (marketData:MarketData) (currentPortfolio:Portfolio) //provided by simulator
+    =
+
+    let state = new ReturnTargetingParameters()
     
-    state.ExpectedReturns <- expectedReturns
     state.TargetReturn <-
-        let idealTargetReturn = RatesM.Continuous.annualRateForReturn returnToGoal yearsToCashout
-        let maxExpectedReturn = Array.max state.ExpectedReturns
+        let yearsToCashout =
+            let realYearsToCashout = FDatesM.yearsBetweenDates today targetDate
+            smoothing realYearsToCashout 0.5 (FDatesM.percentageOfTimeOccurred initDate today targetDate)
+        let returnToGoal =
+            let accumReturn = Returns.fromValues initialCash (currentPortfolio.TotalValue marketData.AvgPrices)
+            targetReturn - accumReturn
+        let annualReturnToGoal = RatesM.Continuous.annualRateForReturn returnToGoal yearsToCashout
+        let idealTargetReturn = if annualReturnToGoal < marketData.RiskFree then marketData.RiskFree else annualReturnToGoal
+        let maxExpectedReturn = Array.max marketData.ExpectedReturns
         if maxExpectedReturn < idealTargetReturn then maxExpectedReturn else idealTargetReturn
                 
-    state.Omega <- varcovar
-    state.PreviousPortfolio <- currentPortfolio.Stocks
-    state.RiskFree <- riskFreeRate
-    state.AvgPrices <- Frame.rowAsArray today avgPrices
-    state.BidPrices <- Frame.rowAsArray today bidPrices
-    state.AskPrices <- Frame.rowAsArray today askPrices
-    state.AvailableCash <- currentPortfolio.Money
-    state.ShouldRebalance <- false
+    state.CurrentStocksAllocation <- currentPortfolio.Stocks
+    state.MarketData <- marketData
+
     let newValuationOfCurrentPortfolio  =
-        RebalancingValuation.ValuePortfolio(state, currentPortfolio.Stocks)
-        |> roundStocks state
-    state.ShouldRebalance <- true
-    let newOptimization =
-        Optimization.Optimize(state, currentPortfolio.Stocks)
-        |> roundStocks state
-    let newCurrentValuation = pickBestPortfolio OptimizationKinds.TargetReturn newValuationOfCurrentPortfolio newOptimization riskFreeRate
-    portfolioFromValuation today newCurrentValuation newValuationOfCurrentPortfolio riskFreeRate
+        RebalancingValuation.ValuePortfolio(marketData, currentPortfolio.Stocks, currentPortfolio.Stocks)
+    let newCurrentValuation =
+        if Seq.contains today datesForRebalancing
+        then
+            let newOptimization =
+                let optimization = Optimization.Optimize(state, currentPortfolio.Stocks)
+                roundStocks marketData currentPortfolio.Stocks (optimization.StocksAllocation)
+            pickBestPortfolio OptimizationKinds.TargetReturn newValuationOfCurrentPortfolio newOptimization marketData.RiskFree
+        else
+            newValuationOfCurrentPortfolio
     
+    portfolioFromValuation today currentPortfolio newCurrentValuation marketData.RiskFree
+
+let cashout percent cashoutDates date marketData (currentPortfolio:Portfolio) =
+    if Seq.contains date cashoutDates
+            then
+                let newPortfolio, cashout = currentPortfolio.Cashout marketData percent
+                newPortfolio, cashout
+            else currentPortfolio, 0.0
+   
 let simulate
-        (firstDate:DateTime) initialCash datesForAnalysis
-        avgPrices dividends
-        simulator
+        (initialPortfolio:Portfolio)
+        datesForAnalysis
+        marketDataConstructor
+        managementSimulator
+        cashoutSimulator
         =
-    let n = Frame.countCols dividends
     let mutable portfolios = List.empty
     let mutable performances = List.empty
     
-    let mutable currentPortfolio = BookKeeping.portfolioWithOnlyCash firstDate initialCash n
+    let mutable currentPortfolio = initialPortfolio
 
-    datesForAnalysis
-    |> Seq.iter(fun today ->
-        printfn "Today: %s" (today.ToString())
-        let performance = currentPortfolio.performanceFor today dividends avgPrices
-        performances <- List.append performances [performance]
-        currentPortfolio <- { currentPortfolio with Money = performance.DividendsReceived + currentPortfolio.Money }
-        
-        currentPortfolio <- simulator today currentPortfolio
+    Seq.pairwise datesForAnalysis
+    |> Seq.iter(fun (previousDay, today) ->
+        let todayMarketData = marketDataConstructor today
+        let yesterdayMarketData = marketDataConstructor previousDay
+        currentPortfolio <- managementSimulator today yesterdayMarketData currentPortfolio 
         portfolios <- List.append portfolios [currentPortfolio]
+
+        let (portfolioAfterCashout : Portfolio), cashout = cashoutSimulator today yesterdayMarketData currentPortfolio
+        let performance = currentPortfolio.performanceFor today todayMarketData currentPortfolio.DividendsAccount cashout
+        currentPortfolio <- portfolioAfterCashout
+        performances <- List.append performances [performance]
     )
-    BookKeeping.portfoliosToFrame (dividends.ColumnKeys) portfolios, BookKeeping.performanceToFrame performances
+    portfolios, performances
 
 let simulateTargetReturn
-    datesForAnalysis avgPrices dividends
-    (bidPrices:Frame<_,_>) (askPrices:Frame<_,_>) (returns:Frame<_,_>) (marketValues:Frame<_,_>) (expectedPrices:Frame<_,_>)
-    (riskFreeRates:Series<_,_>) 
-    commission
-    initDate targetDate targetReturn
-    initialCash =
-        let simulator =
-            targetReturnSimulator 
-                bidPrices askPrices avgPrices returns marketValues expectedPrices
-                riskFreeRates
-                commission
-                initDate targetDate targetReturn initialCash
-
-        simulate initDate initialCash datesForAnalysis avgPrices dividends simulator
-                     
-
-(*
-let simulateBenchmark (firstDate:DateTime) lastDate targetDate (returns:Frame<_,_>) (marketValues:Frame<_,_>) (riskFreeRates:Series<_,_>) transactionCost =
-    let pickBestPortfolio = pickBestPortfolio OptimizationKinds.TargetReturn
-    let state = new StateForPortfolioTargeting()
-    state.TransactionCost <- transactionCost
-    
-    let datesForAnalysis = returns.RowKeys |> Seq.filter(fun date -> date >= firstDate && date < lastDate)
-
-    seq {
-        let mutable currentPortfolio = ValuationResult(returns.ColumnCount).Weights
-        let mutable acumLogReturn = 0.0
-        let mutable transactionCost = 0.0
-        yield!
-            datesForAnalysis
-            |> Seq.map(fun today ->
-                printfn "Today: %s" (today.ToString("yy.MM.dd"))
-                let oneYearAgo = today.AddYears(-1)
-                let benchmark = Array.create 19 (1.0/19.0) //VectorOp.normalize(Frame.asArray marketValues.Rows.[today..today])
-                let returnsForPeriod = returns.Rows.[oneYearAgo..today]
-
-                let varcovar = Frame.varcovar 250. returnsForPeriod
-                
-                
-                
-                let riskFreeRate = 0.04 //riskFreeRates.[today]
-                let yearsToCashout = (targetDate - today).TotalDays / 365.
-
-                let todayReturn =
-                    let todayReturns = Frame.asArray (returns.Rows.[today..today])
-                    VectorOp.sumproduct(todayReturns, currentPortfolio)
-                acumLogReturn <- acumLogReturn + (Returns.toLogarithmic (1.0 - transactionCost) * todayReturn)
-                let accumReturn = Returns.toArithmeticReturn acumLogReturn
-
-                state.TargetPortfolio <- benchmark
-                state.Years <- yearsToCashout
-                state.Omega <- varcovar
-                state.PreviousPortfolio <- currentPortfolio
-                state.RiskFree <- riskFreeRate
-                
-                state.ExpectedReturns <- 
-                    let meanReturn = (Deedle.Stats.mean(returnsForPeriod)).Values |> Array.ofSeq
-                    VectorOp.multiplication(meanReturn, 250.0)
-                let newValuationOfCurrentPortfolio  = Optimization.ValuePortfolio(state, currentPortfolio);
-                let newOptimization                 = Optimization.Optimize(state, benchmark)
-                let newCurrentValuation, rebalanced = pickBestPortfolio newValuationOfCurrentPortfolio newOptimization riskFreeRate
-                currentPortfolio <- newCurrentValuation.Weights
-                transactionCost <- newCurrentValuation.TransactionCost
-                
-                { Date = today; ValuationResult = newCurrentValuation; Rebalanced = rebalanced; Return = todayReturn;  AccumReturn = accumReturn}
-            )
-    }
-    |> eventsToFrame returns.ColumnKeys
-*)
+    initialPortfolio
+    datesForAnalysis
+    marketDataConstructor
+    rebalancing
+    cashout
+    =
+        simulate initialPortfolio datesForAnalysis marketDataConstructor rebalancing cashout 
