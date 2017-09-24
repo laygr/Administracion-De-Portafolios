@@ -35,6 +35,8 @@ type Portfolio = {
     ChangeInSharpeRatio : float
     CommissionCost : float
     SpreadCost : float
+    CashEarned : float
+    CashExpended : float
 } with
     member this.SharpeRatio riskFreeRate =
         if this.ExpectedReturn = 0.0 || this.StdDev = 0.0
@@ -68,6 +70,7 @@ type Portfolio = {
             let columns =
                 [ "DividendsAccount"; "Expected Return"; "Standard Deviation"; "Change In Expected Return";
                     "Change In Std Dev"; "Change In Sharpe Ratio"; "Commission Cost"; "Spread Cost";
+                    "Cash Earned"; "Cash Expended"
                 ]
                 |> Seq.append assetNames
             let values =
@@ -81,6 +84,8 @@ type Portfolio = {
                         string this.ChangeInSharpeRatio
                         string this.CommissionCost
                         string this.SpreadCost
+                        string this.CashEarned
+                        string this.CashExpended
                     ]
                     |> Seq.append (Seq.ofArray this.Stocks |> Seq.map string))
             Frame.merge frame (Frame(columns, values))
@@ -118,14 +123,17 @@ let portfolioFromValuation date (currentPortfolio:Portfolio) (valuation:Valuatio
         ChangeInSharpeRatio = valuation.SharpeRatio(riskFree) - currentPortfolio.SharpeRatio(riskFree)
         CommissionCost = valuation.RebalancingCost.CommissionCosts
         SpreadCost = valuation.RebalancingCost.SpreadCost
+        CashEarned = valuation.RebalancingCost.CashEarned
+        CashExpended = valuation.RebalancingCost.CashExpended
     }
+let benchmarkPortfolioStocks cash (avgPrices:double[]) =
+    let n = float avgPrices.Length
+    VectorOp.division(cash / n, avgPrices)
 
-let portfolioWithOnlyCash date cash n =
-    let zeroes = Array.zeroCreate n
-    zeroes.[n-1] <- cash
+let emptyPortfolio date n =
     {
         Date = date
-        Stocks = zeroes
+        Stocks = Array.zeroCreate n
         DividendsAccount = 0.0
         ExpectedReturn = 0.0
         StdDev = 0.0
@@ -134,7 +142,14 @@ let portfolioWithOnlyCash date cash n =
         ChangeInSharpeRatio = 0.0
         CommissionCost = 0.0
         SpreadCost = 0.0
+        CashEarned = 0.0
+        CashExpended = 0.0
     }
+
+let portfolioWithOnlyCash date cash n =
+    let zeroes = Array.zeroCreate n
+    zeroes.[n-1] <- cash
+    {emptyPortfolio date n with Stocks = zeroes }
 
 let portfoliosToFrame assetNames =
     let emptyFrame = Frame<DateTime,String>(Seq.empty, Seq.empty)

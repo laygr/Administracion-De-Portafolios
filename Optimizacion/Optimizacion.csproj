@@ -48,7 +48,6 @@
     <Compile Include="AuxFuncs.cs" />
     <Compile Include="Main.cs" />
     <Compile Include="MarketData.cs" />
-    <Compile Include="Rebalancing.cs" />
     <Compile Include="RebalancingValuation.cs" />
     <Compile Include="Optimization.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

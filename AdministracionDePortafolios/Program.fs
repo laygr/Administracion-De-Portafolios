@@ -3,10 +3,9 @@
 
 module Main =
     
-    open Optimizacion
-    open InputInterface
     open Deedle
     open System
+    open Optimizacion
     open BookKeeping
 
     (*
@@ -25,6 +24,7 @@ module Main =
     let bidPrices = Frame.loadDateFrame "..\..\Input Data\All Market\Bid Prices.csv" "Fecha"
     let askPrices = Frame.loadDateFrame "..\..\Input Data\All Market\Ask Prices.csv" "Fecha"
     let dividends = Frame.loadDateFrame "..\..\Input Data\All Market\Dividends.csv" "Fecha"
+    let (riskFreeRates : Series<DateTime,string>) = Series.loadDateSeries "..\..\Input Data\Risk Free Rates.csv" "Fecha" "SF43936"
 
     let avgPrices =
         bidPrices.Clone()
@@ -52,10 +52,11 @@ module Main =
         DateTime(2017,06,30); DateTime(2017,07,28); DateTime(2017,08,25); 
     ]
 
-    [<EntryPoint>]
-    let main argv =
-        
-        
+    let monthlyCashout = 1.02**(1.0/12.0) - 1.0
+    let cashoutSimulator = PortfolioManagement.cashout monthlyCashout cashoutDates 
+    
+
+    let simulatePortfolio () =
         let selectedStocks =
             [|
                 "BMV:GISSA A";"BMV: GRUMA B"; (*"BMV: BACHOCO B"; *)"BMV:VITRO A"; "BMV: GAP B"; "BMV:GFNORTE O";
@@ -66,35 +67,71 @@ module Main =
             |> Array.map(fun s -> s.ToUpper())
             *)
         let returns, marketCap, expectedPrices, bidPrices, askPrices, avgPrices, dividends = filteredData selectedStocks
-        let riskFreeRates = Series.loadDateSeries "..\..\Input Data\Risk Free Rates.csv" "Fecha" "SF43936"
-        let n = selectedStocks.Length
-        
-        let targetReturn = 1.432365 //RatesM.Return.returnFor initialCash 32630537.75 
-        
-        let datesForRebalancing = [DateTime(2016, 09, 02); DateTime(2016, 11, 11)]
-        
-        let initialPorfolio = BookKeeping.portfolioWithOnlyCash initDate initialCash n
-
-        let rebalancing =
-            PortfolioManagement.rebalanceForTargetReturn 
-                datesForRebalancing
-                initDate targetDate targetReturn initialCash
-
-        let monthlyCashout = 1.02**(1.0/12.0) - 1.0
-        let cashoutSimulator = PortfolioManagement.cashout monthlyCashout cashoutDates 
 
         let marketConstructor =
             PortfolioManagement.constructMarketData
                 commission returns bidPrices askPrices avgPrices expectedPrices marketCap dividends riskFreeRates
+        
+        let n = selectedStocks.Length
+        
+        let initialPorfolio = BookKeeping.portfolioWithOnlyCash initDate initialCash n
+
+        let rebalancing =
+            let targetReturn = 1.432365 //RatesM.Return.returnFor initialCash 32630537.75 
+            let datesForRebalancing = [DateTime(2016, 09, 02); DateTime(2016, 11, 11)]
+            PortfolioManagement.rebalanceForTargetReturn 
+                datesForRebalancing
+                initDate targetDate targetReturn initialCash
 
         let portfolios, performances =
-            PortfolioManagement.simulateTargetReturn initialPorfolio datesForAnalysis marketConstructor rebalancing cashoutSimulator
+            PortfolioManagement.simulate initialPorfolio datesForAnalysis marketConstructor rebalancing cashoutSimulator
             //PortfolioManagement.simulateBenchmark initDate endDate targetDate returns marketCap riskFreeRates transactionCost
         let portfoliosFrame, performancesFrame =
             BookKeeping.portfoliosToFrame selectedStocks portfolios,
             BookKeeping.performanceToFrame performances
 
-        portfoliosFrame.SaveCsv("../../Output Data/Portfolios.csv",true)
-        performancesFrame.SaveCsv("../../Output Data/Performances.csv",true)
+        portfoliosFrame.SaveCsv("../../Output Data/Portfolio/Portfolios.csv",true)
+        performancesFrame.SaveCsv("../../Output Data/Portfolio/Performances.csv",true)
+
+    let simulateBenchmark () =
+        let selectedStocks =
+            [|
+                "BMV:GISSA A";"BMV: GRUMA B"; (*"BMV: BACHOCO B"; *)"BMV:VITRO A"; "BMV: GAP B"; "BMV:GFNORTE O";
+                "BMV:HERDEZ *"; "BMV: AMX L"; "BMV: FEMSA UBD"; "BMV: CEMEX CPO"; "BMV:AUTLAN B";
+            |]
+        let returns, marketCap, expectedPrices, bidPrices, askPrices, avgPrices, dividends = filteredData selectedStocks
+
+        let marketConstructor =
+            PortfolioManagement.constructMarketData
+                commission returns bidPrices askPrices avgPrices expectedPrices marketCap dividends riskFreeRates
+        
+        let n = selectedStocks.Length
+        
+        let portfolioManagement today marketData (currentPortfolio:Portfolio) =
+            let newValuation  = RebalancingValuation.ValuePortfolio(marketData, currentPortfolio.Stocks, currentPortfolio.Stocks)
+            portfolioFromValuation today currentPortfolio newValuation marketData.RiskFree
+
+        let initialPorfolio =
+            let marketData = marketConstructor initDate
+            let blankPortfolio = BookKeeping.emptyPortfolio initDate n
+            let equallyWeightedPortfolio = BookKeeping.benchmarkPortfolioStocks initialCash marketData.AvgPrices
+            let newValuation  = RebalancingValuation.ValuePortfolio(marketData, equallyWeightedPortfolio, equallyWeightedPortfolio)
+            portfolioFromValuation initDate blankPortfolio newValuation marketData.RiskFree
+            |> portfolioManagement initDate (marketConstructor initDate)
+
+        let portfolios, performances =
+            PortfolioManagement.simulate initialPorfolio datesForAnalysis marketConstructor portfolioManagement cashoutSimulator
+            //PortfolioManagement.simulateBenchmark initDate endDate targetDate returns marketCap riskFreeRates transactionCost
+        let portfoliosFrame, performancesFrame =
+            BookKeeping.portfoliosToFrame selectedStocks portfolios,
+            BookKeeping.performanceToFrame performances
+
+        portfoliosFrame.SaveCsv("../../Output Data/Benchmark/Portfolios.csv",true)
+        performancesFrame.SaveCsv("../../Output Data/Benchmark/Performances.csv",true)
+
+    [<EntryPoint>]
+    let main argv =
+        simulatePortfolio()
+        simulateBenchmark()
         printfn "%A" argv
         0

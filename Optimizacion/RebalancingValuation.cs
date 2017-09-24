@@ -9,6 +9,8 @@ namespace Optimizacion
     public class RebalancingCosts
     {
         public double SharesBuySell { get; set; }
+        public double CashEarned { get; set; }
+        public double CashExpended { get; set; }
         public double CommissionCosts { get; set; }
         public double TotalRebalancingCost { get; set; }
         public double SpreadCost { get { return TotalRebalancingCost - CommissionCosts; } }
@@ -77,6 +79,8 @@ namespace Optimizacion
         {
             double sharesBuySellAcum = 0;
             double commissionCostAcum = 0;
+            double cashEarned = 0;
+            double cashExpended = 0;
             int n = currentStocksAllocation.Length;
             var pricesToUse = PricesToUse(currentStocksAllocation, newStocksAllocation, state.BidPrices, state.AskPrices);
             for (int i = 0; i < n; i++)
@@ -87,6 +91,13 @@ namespace Optimizacion
 
                 sharesBuySellAcum += shareBuySell - commissionCost;
                 commissionCostAcum += commissionCost;
+                if(shareBuySell > 0)
+                {
+                    cashEarned += shareBuySell;
+                }else
+                {
+                    cashExpended -= shareBuySell;
+                }
 
             }
             var currentStocksAllocationValue = state.StocksValue(currentStocksAllocation);
@@ -95,7 +106,9 @@ namespace Optimizacion
             {
                 TotalRebalancingCost = currentStocksAllocationValue - (newStocksAllocationValue + sharesBuySellAcum),
                 CommissionCosts = commissionCostAcum,
-                SharesBuySell = sharesBuySellAcum
+                SharesBuySell = sharesBuySellAcum,
+                CashEarned = cashEarned,
+                CashExpended = cashExpended
             };
         }
     }

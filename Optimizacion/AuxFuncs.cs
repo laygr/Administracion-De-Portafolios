@@ -61,6 +61,17 @@ namespace Optimizacion
             return result;
         }
 
+        public static double[] division(double a, double[] b)
+        {
+            int n = b.Length;
+            double[] result = new double[n];
+            for (int i = 0; i < n; i++)
+            {
+                result[i] = a / b[i];
+            }
+            return result;
+        }
+
         public static double[] normalize(double[] a)
         {
             var sum = a.Sum();

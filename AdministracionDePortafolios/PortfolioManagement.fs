@@ -74,7 +74,6 @@ let rebalanceForTargetReturn
     initDate targetDate targetReturn initialCash
     (today: DateTime) (marketData:MarketData) (currentPortfolio:Portfolio) //provided by simulator
     =
-
     let state = new ReturnTargetingParameters()
     
     state.TargetReturn <-
@@ -137,13 +136,4 @@ let simulate
         currentPortfolio <- portfolioAfterCashout
         performances <- List.append performances [performance]
     )
-    portfolios, performances
-
-let simulateTargetReturn
-    initialPortfolio
-    datesForAnalysis
-    marketDataConstructor
-    rebalancing
-    cashout
-    =
-        simulate initialPortfolio datesForAnalysis marketDataConstructor rebalancing cashout 
+    portfolios, performances 
