@@ -35,26 +35,27 @@ let roundStocks (state:MarketData) currentStocksAllocation newStocksAllocation=
 let constructMarketData
         commission
         (returns:Frame<_,_>)
-        bidPrices askPrices avgPrices expectedPrices (marketCapValues:Frame<_,_>) dividends riskFreeRates
+        bidPrices askPrices avgPrices (expectedPrices:Frame<_,_>) (marketCapValues:Frame<_,_>) dividends
         (today:DateTime) =
     let oneYearAgo = today.AddYears(-1)
+    
+    
     let returnsForPeriod = returns.Rows.[oneYearAgo..today]
-
-    let expectedAnnualReturns =
-        let meanReturn = (Deedle.Stats.mean(returnsForPeriod)).Values |> Array.ofSeq
-        VectorOp.multiplication(meanReturn, 250.0)
-    let returnsForPeriod = returns.Rows.[oneYearAgo..today]
-    let riskFreeRate = 0.04 //riskFreeRates.[today]
     let marketData = new MarketData()
     marketData.Commission <- commission
-    marketData.Omega <- Frame.varcovar 250. returnsForPeriod
-    marketData.RiskFree <- riskFreeRate
+    marketData.Omega <- Frame.varcovar 50. returnsForPeriod
     marketData.AvgPrices <- Frame.rowAsArray today avgPrices
     marketData.BidPrices <- Frame.rowAsArray today bidPrices
     marketData.AskPrices <- Frame.rowAsArray today askPrices
     marketData.Dividends <- Frame.rowAsArray today dividends
     marketData.ExpectedReturns <-
+        (*
+        let returnsForPeriod = returns.Rows.[oneYearAgo..today]
+        let expectedAnnualReturns =
+            let meanReturn = (Deedle.Stats.mean(returnsForPeriod)).Values |> Array.ofSeq
+            VectorOp.multiplication(meanReturn, 50.0)
         let expectedReturns' =
+            
             let currentPrices = Frame.rowAsArray today avgPrices
             let expectedPricesA = (Frame.rowAsArray today expectedPrices)
             let expectedReturns = VectorOp.Addition(VectorOp.DotDivision(expectedPricesA, currentPrices), - 1.0)
@@ -67,11 +68,13 @@ let constructMarketData
         let deltas = VectorOp.DotSubtraction(expectedReturns', impliedReturns)
         BlackLitterman.adjustedReturns impliedReturns deltas marketData.Omega
         expectedReturns'
+        *)
+        Frame.rowAsArray today expectedPrices
     marketData
 
 let rebalanceForTargetReturn
     datesForRebalancing
-    initDate targetDate targetReturn initialCash
+    initDate targetDate targetReturn initialCash (proportions:Frame<_,_>)
     (today: DateTime) (marketData:MarketData) (currentPortfolio:Portfolio) //provided by simulator
     =
     let state = new ReturnTargetingParameters()
@@ -90,6 +93,9 @@ let rebalanceForTargetReturn
                 
     state.CurrentStocksAllocation <- currentPortfolio.Stocks
     state.MarketData <- marketData
+    state.HoldProportions <- (proportions?Hold).[today] = 1.0
+    state.IPCProportion <- (proportions?IPC).[today]
+    state.StocksProportion <- (proportions?Stocks).[today]
 
     let newValuationOfCurrentPortfolio  =
         RebalancingValuation.ValuePortfolio(marketData, currentPortfolio.Stocks, currentPortfolio.Stocks)
@@ -104,20 +110,12 @@ let rebalanceForTargetReturn
             newValuationOfCurrentPortfolio
     
     portfolioFromValuation today currentPortfolio newCurrentValuation marketData.RiskFree
-
-let cashout percent cashoutDates date marketData (currentPortfolio:Portfolio) =
-    if Seq.contains date cashoutDates
-            then
-                let newPortfolio, cashout = currentPortfolio.Cashout marketData percent
-                newPortfolio, cashout
-            else currentPortfolio, 0.0
    
 let simulate
         (initialPortfolio:Portfolio)
         datesForAnalysis
         marketDataConstructor
         managementSimulator
-        cashoutSimulator
         =
     let mutable portfolios = List.empty
     let mutable performances = List.empty
@@ -130,10 +128,8 @@ let simulate
         let yesterdayMarketData = marketDataConstructor previousDay
         currentPortfolio <- managementSimulator today yesterdayMarketData currentPortfolio 
         portfolios <- List.append portfolios [currentPortfolio]
+        let performance = currentPortfolio.performanceFor today todayMarketData currentPortfolio.DividendsAccount
 
-        let (portfolioAfterCashout : Portfolio), cashout = cashoutSimulator today yesterdayMarketData currentPortfolio
-        let performance = currentPortfolio.performanceFor today todayMarketData currentPortfolio.DividendsAccount cashout
-        currentPortfolio <- portfolioAfterCashout
         performances <- List.append performances [performance]
     )
     portfolios, performances 

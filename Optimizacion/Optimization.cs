@@ -6,7 +6,11 @@ namespace Optimizacion
     public enum OptimizationKinds { TargetReturn, TargetPortfolio, MaximizeUtility }
     public abstract class OptimizationParameters {
         public MarketData MarketData { get; set; }
+        public double Cashout { get; set; }
         public double[] CurrentStocksAllocation { get; set; }
+        public double StocksProportion { get; set; }
+        public double IPCProportion { get; set; }
+        public bool HoldProportions { get; set; }
         public double StocksValue()
         {
             return MarketData.StocksValue(CurrentStocksAllocation);
@@ -28,13 +32,32 @@ namespace Optimizacion
                  //fi[0] = -valuation.ExpectedReturn / valuation.StdDev;
                  fi[0] = valuation.StdDev;
                  fi[1] = Math.Pow(error,2) * 100000000000;
-                 // no left money:
-                 fi[2] = valuation.RebalancingCost.SharesBuySell * 1000; //fi[2] = Enumerable.Sum(xs) -1;
+                 // Cashout:
+                 fi[2] = valuation.RebalancingCost.SharesBuySell * 1000 - state.Cashout; //fi[2] = Enumerable.Sum(xs) -1;
+                 var totalValue = state.MarketData.StocksValue(newStocksAllocation);
+                 
+                 if (state.HoldProportions)
+                 {
+                     int n = newStocksAllocation.Length;
+                     double[] stocksAlloc = ((double[])newStocksAllocation.Clone());
+
+                     stocksAlloc[n - 2] = 0;
+                     stocksAlloc[n - 1] = 0;
+                     double[] ipc = new double[n];
+                     ipc[n - 2] = newStocksAllocation[n - 2];
+                     fi[3] = state.MarketData.StocksValue(stocksAlloc) / totalValue - state.StocksProportion;//stocks;
+                     fi[4] = state.MarketData.StocksValue(ipc) / totalValue - state.IPCProportion;//ipc;
+                 }
+                 else
+                 {
+                     fi[3] = 0;
+                     fi[4] = 0;
+                 }
 
                  // No short sales
                  for(int i = 0; i < state.CurrentStocksAllocation.Length; i++)
                  {
-                     fi[3 + i] = (-newStocksAllocation[i]) * 1000000;
+                     fi[5 + i] = (-newStocksAllocation[i]) * 100000000;
                  }
              };
              return f;
@@ -76,7 +99,7 @@ namespace Optimizacion
             if(stateType == typeof(ReturnTargetingParameters))
             {
                 functionToOptimize = target_return_func((ReturnTargetingParameters)state);
-                equalities = 2;
+                equalities = 4;
                 inequalities = initialValues.Length;
             }else if(false)//stateType == typeof(StateForUtilityMaximization))
             {

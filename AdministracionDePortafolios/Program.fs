@@ -18,13 +18,13 @@ module Main =
         let filterBySelectedStocks = Frame.filterCols(fun (c:string) _ -> Array.contains (c.ToUpper()) selectedStocks)
         filterBySelectedStocks >> Frame.sortColsByKey
     
-    let returns = Frame.loadDateFrame "..\..\Input Data\All Market\Returns.csv" "Fecha"        
-    let marketCap = Frame.loadDateFrame "..\..\Input Data\All Market\Market Cap.csv" "Fecha"
-    let expectedPrices = Frame.loadDateFrame "..\..\Input Data\All Market\Expected Prices.csv" "Fecha"
-    let bidPrices = Frame.loadDateFrame "..\..\Input Data\All Market\Bid Prices.csv" "Fecha"
-    let askPrices = Frame.loadDateFrame "..\..\Input Data\All Market\Ask Prices.csv" "Fecha"
-    let dividends = Frame.loadDateFrame "..\..\Input Data\All Market\Dividends.csv" "Fecha"
-    let (riskFreeRates : Series<DateTime,string>) = Series.loadDateSeries "..\..\Input Data\Risk Free Rates.csv" "Fecha" "SF43936"
+    let returns = Frame.loadDateFrame "..\..\Input Data\Returns.csv" "Fecha"        
+    let marketCap = Frame.loadDateFrame "..\..\Input Data\Market Cap.csv" "Fecha"
+    let expectedPrices = Frame.loadDateFrame "..\..\Input Data\Expected Returns.csv" "Fecha"
+    let bidPrices = Frame.loadDateFrame "..\..\Input Data\Bid Prices.csv" "Fecha"
+    let askPrices = Frame.loadDateFrame "..\..\Input Data\Ask Prices.csv" "Fecha"
+    let dividends = Frame.loadDateFrame "..\..\Input Data\Dividends.csv" "Fecha"
+    let cashouts: Frame<_,_> = Frame.loadDateFrame "..\..\Input Data\Cashouts.csv" "Fecha"
 
     let avgPrices =
         bidPrices.Clone()
@@ -46,21 +46,18 @@ module Main =
     let datesForAnalysis =
         returns.RowKeys
         |> Seq.filter(fun date -> date >= initDate && date <= endDate)
-    let cashoutDates = [
-        DateTime(2016,09,30); DateTime(2016,10,28); DateTime(2016,11,25); DateTime(2016,12,30);
-        DateTime(2017,01,27); DateTime(2017,02,24); DateTime(2017,03,31); DateTime(2017,04,28); DateTime(2017,05,26);
-        DateTime(2017,06,30); DateTime(2017,07,28); DateTime(2017,08,25); 
-    ]
-
-    let monthlyCashout = 1.02**(1.0/12.0) - 1.0
-    let cashoutSimulator = PortfolioManagement.cashout monthlyCashout cashoutDates 
     
-
     let simulatePortfolio () =
+        let proportions = Frame.loadDateFrame "..\..\Input Data\Portfolio\Proportions.csv" "Fecha"
         let selectedStocks =
             [|
-                "BMV:GISSA A";"BMV: GRUMA B"; (*"BMV: BACHOCO B"; *)"BMV:VITRO A"; "BMV: GAP B"; "BMV:GFNORTE O";
-                "BMV:HERDEZ *"; "BMV: AMX L"; "BMV: FEMSA UBD"; "BMV: CEMEX CPO"; "BMV:AUTLAN B"; "MXN"
+                "BMV: AMX L"; "BMV: CEMEX CPO";
+                "BMV: FEMSA UBD"; "BMV: GAP B";
+                "BMV: GRUMA B"; "BMV:AUTLAN B";
+                "BMV:GFNORTE O";
+                "BMV:GISSA A"; "BMV:HERDEZ *";
+                "BMV:VITRO A"; "BMV: NAFTRAC";
+                 "Z: CETES"
             |]
         (*
             loadRowOfStrings "..\..\Input Data\Selected Stocks.csv" false
@@ -70,21 +67,27 @@ module Main =
 
         let marketConstructor =
             PortfolioManagement.constructMarketData
-                commission returns bidPrices askPrices avgPrices expectedPrices marketCap dividends riskFreeRates
+                commission returns bidPrices askPrices avgPrices expectedPrices marketCap dividends
         
         let n = selectedStocks.Length
         
         let initialPorfolio = BookKeeping.portfolioWithOnlyCash initDate initialCash n
 
-        let rebalancing =
+        let portfolioManagement today marketData (currentPortfolio:Portfolio) =
             let targetReturn = 1.432365 //RatesM.Return.returnFor initialCash 32630537.75 
-            let datesForRebalancing = [DateTime(2016, 09, 02); DateTime(2016, 11, 11)]
-            PortfolioManagement.rebalanceForTargetReturn 
-                datesForRebalancing
-                initDate targetDate targetReturn initialCash
+            let datesForRebalancing = [
+                DateTime(2016, 09, 01) ; DateTime(2016, 11, 10) ; DateTime(2016,12,31) ;
+                DateTime(2017,03,30); DateTime(2017, 05, 02); DateTime(2017,08,30)
+            ]
+            let portfolio =
+                PortfolioManagement.rebalanceForTargetReturn 
+                    datesForRebalancing
+                    initDate targetDate targetReturn initialCash proportions
+                    today marketData currentPortfolio
+            portfolio.CashoutMoney marketData ((cashouts?Cashout).[today])
 
         let portfolios, performances =
-            PortfolioManagement.simulate initialPorfolio datesForAnalysis marketConstructor rebalancing cashoutSimulator
+            PortfolioManagement.simulate initialPorfolio datesForAnalysis marketConstructor portfolioManagement
             //PortfolioManagement.simulateBenchmark initDate endDate targetDate returns marketCap riskFreeRates transactionCost
         let portfoliosFrame, performancesFrame =
             BookKeeping.portfoliosToFrame selectedStocks portfolios,
@@ -94,23 +97,21 @@ module Main =
         performancesFrame.SaveCsv("../../Output Data/Portfolio/Performances.csv",true)
 
     let simulateBenchmark () =
-        let selectedStocks =
-            [|
-                "BMV:GISSA A";"BMV: GRUMA B"; (*"BMV: BACHOCO B"; *)"BMV:VITRO A"; "BMV: GAP B"; "BMV:GFNORTE O";
-                "BMV:HERDEZ *"; "BMV: AMX L"; "BMV: FEMSA UBD"; "BMV: CEMEX CPO"; "BMV:AUTLAN B";
-            |]
+        let selectedStocks = [| "BMV: NAFTRAC"; "Z: CETES"|]
         let returns, marketCap, expectedPrices, bidPrices, askPrices, avgPrices, dividends = filteredData selectedStocks
 
         let marketConstructor =
             PortfolioManagement.constructMarketData
-                commission returns bidPrices askPrices avgPrices expectedPrices marketCap dividends riskFreeRates
+                commission returns bidPrices askPrices avgPrices expectedPrices marketCap dividends
         
         let n = selectedStocks.Length
         
-        let portfolioManagement today marketData (currentPortfolio:Portfolio) =
+        let portfolioManagement (today:DateTime) marketData (currentPortfolio:Portfolio) =
             let newValuation  = RebalancingValuation.ValuePortfolio(marketData, currentPortfolio.Stocks, currentPortfolio.Stocks)
-            portfolioFromValuation today currentPortfolio newValuation marketData.RiskFree
+            let portfolio = portfolioFromValuation today currentPortfolio newValuation marketData.RiskFree
+            portfolio.CashoutMoney marketData ((cashouts?Cashout).[today])
 
+        (*
         let initialPorfolio =
             let marketData = marketConstructor initDate
             let blankPortfolio = BookKeeping.emptyPortfolio initDate n
@@ -118,10 +119,17 @@ module Main =
             let newValuation  = RebalancingValuation.ValuePortfolio(marketData, equallyWeightedPortfolio, equallyWeightedPortfolio)
             portfolioFromValuation initDate blankPortfolio newValuation marketData.RiskFree
             |> portfolioManagement initDate (marketConstructor initDate)
+        *)
+        let initialPorfolio =
+            let marketData = marketConstructor initDate
+            let blankPortfolio = BookKeeping.emptyPortfolio initDate n
+            let portfolio = VectorOp.DotDivision(VectorOp.multiplication([|0.8 ; 0.2|], initialCash), marketData.AvgPrices)
+            let newValuation  = RebalancingValuation.ValuePortfolio(marketData, portfolio, portfolio)
+            portfolioFromValuation initDate blankPortfolio newValuation marketData.RiskFree
+            |> portfolioManagement initDate (marketConstructor initDate)
 
         let portfolios, performances =
-            PortfolioManagement.simulate initialPorfolio datesForAnalysis marketConstructor portfolioManagement cashoutSimulator
-            //PortfolioManagement.simulateBenchmark initDate endDate targetDate returns marketCap riskFreeRates transactionCost
+            PortfolioManagement.simulate initialPorfolio datesForAnalysis marketConstructor portfolioManagement
         let portfoliosFrame, performancesFrame =
             BookKeeping.portfoliosToFrame selectedStocks portfolios,
             BookKeeping.performanceToFrame performances

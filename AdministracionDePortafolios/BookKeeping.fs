@@ -3,47 +3,8 @@ open System
 open Deedle
 open Optimizacion
 
-type PortfolioPerformance = {
-    Date : DateTime
-    StocksValue : float
-    DividendsAccount : float
-    Cashout : float
-} with
-    member this.AddToFrame (frame:Frame<DateTime,string>) =
-        let seriesWithValue value =
-                Series([this.Date], [value]) :> ISeries<DateTime>
-        let columns =
-            [ "Stocks & cash"; "Dividends account"; "Cashout"
-            ]
-        let values =
-            Seq.map seriesWithValue
-                ([
-                    string this.StocksValue
-                    string this.DividendsAccount
-                    string this.Cashout
-                ])
-        Frame.merge frame (Frame(columns, values))
-    member this.SetCashout cashout = { this with Cashout = cashout }
-type Portfolio = {
-    Date : DateTime
-    Stocks : float[]
-    DividendsAccount : float
-    ExpectedReturn : float
-    StdDev : float
-    ChangeInExpectedReturn : float
-    ChangeInStdDev : float
-    ChangeInSharpeRatio : float
-    CommissionCost : float
-    SpreadCost : float
-    CashEarned : float
-    CashExpended : float
-} with
-    member this.SharpeRatio riskFreeRate =
-        if this.ExpectedReturn = 0.0 || this.StdDev = 0.0
-        then 0.0 else (this.ExpectedReturn - riskFreeRate) / this.StdDev
-    member this.AddDividends dividends = { this with DividendsAccount = this.DividendsAccount + dividends }
-    member this.ClearDividends () = { this with DividendsAccount = 0.0 }
-    member this.Cashout (marketData:MarketData) percent =
+(*
+let cashoutPercent (marketData:MarketData) percent =
         let stocksValue = this.stocksValue marketData.AvgPrices
         let cashToRemove = (stocksValue + this.DividendsAccount) * percent
         let cashToRemoveFromStocks = max (cashToRemove - this.DividendsAccount) 0.0
@@ -63,14 +24,67 @@ type Portfolio = {
                 SpreadCost = valuation.RebalancingCost.SpreadCost + this.SpreadCost
                 DividendsAccount = 0.0
         }, cashout
-        
+*)
+type PortfolioPerformance = {
+    Date : DateTime
+    StocksValue : float
+    DividendsAccount : float
+} with
+    member this.AddToFrame (frame:Frame<DateTime,string>) =
+        let seriesWithValue value =
+                Series([this.Date], [value]) :> ISeries<DateTime>
+        let columns =
+            [ "Stocks & cash"; "Dividends account"
+            ]
+        let values =
+            Seq.map seriesWithValue
+                ([
+                    string this.StocksValue
+                    string this.DividendsAccount
+                ])
+        Frame.merge frame (Frame(columns, values))
+type Portfolio = {
+    Date : DateTime
+    Stocks : float[]
+    DividendsAccount : float
+    ExpectedReturn : float
+    StdDev : float
+    ChangeInExpectedReturn : float
+    ChangeInStdDev : float
+    ChangeInSharpeRatio : float
+    CommissionCost : float
+    SpreadCost : float
+    CashEarned : float
+    CashExpended : float
+    Cashout : float
+} with
+    member this.CashoutMoney (marketData:MarketData) cashToRemove =
+        let stocksValue = marketData.SellingValue this.Stocks
+        let cashToRemoveFromStocks = max (cashToRemove - this.DividendsAccount) 0.0
+        let percentToRemoveFromStocks = cashToRemoveFromStocks / stocksValue
+        let stocks =
+            Array.map (fun s -> s * (1.0 - percentToRemoveFromStocks) ) this.Stocks
+            |> Array.map (fun (s:float) -> Math.Floor s)
+        let valuation = RebalancingValuation.ValuePortfolio(marketData, this.Stocks, stocks)
+        { this with
+            Stocks = stocks
+            DividendsAccount = 0.0
+            CommissionCost = valuation.RebalancingCost.CommissionCosts + this.CommissionCost
+            Cashout = this.DividendsAccount + marketData.SellingValue (VectorOp.DotSubtraction(this.Stocks, stocks))
+        }
+    member this.SetCashout cashout = { this with Cashout = cashout }
+    member this.SharpeRatio riskFreeRate =
+        if this.ExpectedReturn = 0.0 || this.StdDev = 0.0
+        then 0.0 else (this.ExpectedReturn - riskFreeRate) / this.StdDev
+    member this.AddDividends dividends = { this with DividendsAccount = this.DividendsAccount + dividends }
+    member this.ClearDividends () = { this with DividendsAccount = 0.0 }
     member this.AddToFrame (frame:Frame<DateTime,string>) assetNames =
             let seriesWithValue value =
                 Series([this.Date], [value]) :> ISeries<DateTime>
             let columns =
                 [ "DividendsAccount"; "Expected Return"; "Standard Deviation"; "Change In Expected Return";
                     "Change In Std Dev"; "Change In Sharpe Ratio"; "Commission Cost"; "Spread Cost";
-                    "Cash Earned"; "Cash Expended"
+                    "Cash Earned"; "Cash Expended"; "Cashout"
                 ]
                 |> Seq.append assetNames
             let values =
@@ -86,6 +100,7 @@ type Portfolio = {
                         string this.SpreadCost
                         string this.CashEarned
                         string this.CashExpended
+                        string this.Cashout
                     ]
                     |> Seq.append (Seq.ofArray this.Stocks |> Seq.map string))
             Frame.merge frame (Frame(columns, values))
@@ -97,12 +112,11 @@ type Portfolio = {
     member this.TotalValue avgPrices = 
         this.stocksValue avgPrices
         + this.DividendsAccount
-    member this.performanceFor date (marketData:MarketData) currentDividends cashout =
+    member this.performanceFor date (marketData:MarketData) currentDividends =
         {
             Date = date
             StocksValue = this.stocksValue marketData.AvgPrices
             DividendsAccount = currentDividends + this.dividendsFor marketData.Dividends
-            Cashout = cashout
         }
     member this.Weights date avgPrices =
         let prices = Frame.rowAsArray date avgPrices
@@ -125,6 +139,7 @@ let portfolioFromValuation date (currentPortfolio:Portfolio) (valuation:Valuatio
         SpreadCost = valuation.RebalancingCost.SpreadCost
         CashEarned = valuation.RebalancingCost.CashEarned
         CashExpended = valuation.RebalancingCost.CashExpended
+        Cashout = valuation.RebalancingCost.SharesBuySell
     }
 let benchmarkPortfolioStocks cash (avgPrices:double[]) =
     let n = float avgPrices.Length
@@ -144,6 +159,7 @@ let emptyPortfolio date n =
         SpreadCost = 0.0
         CashEarned = 0.0
         CashExpended = 0.0
+        Cashout = 0.0
     }
 
 let portfolioWithOnlyCash date cash n =

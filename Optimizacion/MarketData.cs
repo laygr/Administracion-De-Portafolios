@@ -5,7 +5,13 @@
         public double[] BidPrices { get; set; }
         public double[] AskPrices { get; set; }
         public double[] AvgPrices { get; set; }
-        public double RiskFree { get; set; }
+        public double RiskFree
+        {
+            get
+            {
+                return ExpectedReturns[ExpectedReturns.Length - 1];
+            }
+        }
         public double Commission { get; set; }
         public double[] ExpectedReturns { get; set; }
         public double[,] Omega { get; set; }
