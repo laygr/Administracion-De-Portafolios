@@ -31,9 +31,9 @@ namespace Optimizacion
                  var error = state.TargetReturn - valuation.ExpectedReturn;
                  //fi[0] = -valuation.ExpectedReturn / valuation.StdDev;
                  fi[0] = valuation.StdDev;
-                 fi[1] = Math.Pow(error,2) * 100000000000;
+                 fi[1] = Math.Pow(error,2);
                  // Cashout:
-                 fi[2] = valuation.RebalancingCost.SharesBuySell * 1000 - state.Cashout; //fi[2] = Enumerable.Sum(xs) -1;
+                 fi[2] = valuation.RebalancingCost.SharesBuySell; //fi[2] = Enumerable.Sum(xs) -1;
                  var totalValue = state.MarketData.StocksValue(newStocksAllocation);
                  
                  if (state.HoldProportions)
@@ -45,19 +45,21 @@ namespace Optimizacion
                      stocksAlloc[n - 1] = 0;
                      double[] ipc = new double[n];
                      ipc[n - 2] = newStocksAllocation[n - 2];
-                     fi[3] = state.MarketData.StocksValue(stocksAlloc) / totalValue - state.StocksProportion;//stocks;
-                     fi[4] = state.MarketData.StocksValue(ipc) / totalValue - state.IPCProportion;//ipc;
+                     fi[3] = (state.MarketData.StocksValue(stocksAlloc) / totalValue - state.StocksProportion);//stocks;
+                     fi[4] = (state.MarketData.StocksValue(ipc) / totalValue - state.IPCProportion);//ipc;
+                     fi[5] = Math.Abs(fi[3]) + Math.Abs(fi[4]);
                  }
                  else
                  {
                      fi[3] = 0;
                      fi[4] = 0;
+                     fi[5] = 0;
                  }
 
                  // No short sales
                  for(int i = 0; i < state.CurrentStocksAllocation.Length; i++)
                  {
-                     fi[5 + i] = (-newStocksAllocation[i]) * 100000000;
+                     fi[6 + i] = (-newStocksAllocation[i]) / 100;
                  }
              };
              return f;
@@ -99,7 +101,7 @@ namespace Optimizacion
             if(stateType == typeof(ReturnTargetingParameters))
             {
                 functionToOptimize = target_return_func((ReturnTargetingParameters)state);
-                equalities = 4;
+                equalities = 5;
                 inequalities = initialValues.Length;
             }else if(false)//stateType == typeof(StateForUtilityMaximization))
             {
@@ -121,7 +123,7 @@ namespace Optimizacion
             double epsx = 0.00001;
             double diffstep = 0.1;
             double radius = 1;
-            double rho = 0.9;
+            double rho = 100000;
             int maxits = 0;
             alglib.minnsstate optimizationState;
             alglib.minnsreport rep;
